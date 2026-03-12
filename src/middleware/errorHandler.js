@@ -10,6 +10,7 @@ export const errorHandler = (err, req, res, next) => {
 
   if (err instanceof HttpError) {
     status = err.status;
+
     message = err.message || err.name || 'Internal Server Error';
   }
 
