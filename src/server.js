@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { isCelebrateError } from 'celebrate';
+import { errors } from 'celebrate';
 
 import { connectMongoDB } from './db/connectMongoDB.js';
 import { logger } from './middleware/logger.js';
@@ -22,24 +22,8 @@ app.use(express.json());
 
 app.use('/notes', notesRoutes);
 
-app.use((err, req, res, next) => {
-  if (isCelebrateError(err)) {
-    const errorBody = err.details.get('body') ||
-                      err.details.get('query') ||
-                      err.details.get('params');
 
-    const messages = errorBody?.details.map(detail => ({
-      field: detail.path.join('.'),
-      message: detail.message
-    })) || [{ field: 'unknown', message: 'Validation error' }];
-
-    return res.status(400).json({
-      message: 'Validation error',
-      errors: messages
-    });
-  }
-  next(err);
-});
+app.use(errors());
 
 app.use(notFoundHandler);
 app.use(errorHandler);
