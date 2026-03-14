@@ -19,9 +19,10 @@ export const getAllNotes = async (req, res, next) => {
       query = query.where({ $text: { $search: search.trim() } });
     }
 
-    const totalNotes = await Note.countDocuments(query.getFilter());
-
-    const notes = await query.skip(skip).limit(perPage).sort({ createdAt: -1 });
+    const [totalNotes, notes] = await Promise.all([
+      Note.countDocuments(query.getFilter()),
+      query.skip(skip).limit(perPage).sort({ createdAt: -1 })
+    ]);
 
     res.status(200).json({
       page,
