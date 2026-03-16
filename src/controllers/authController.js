@@ -1,9 +1,15 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import fs from 'fs/promises';
+import path from 'path';
+import Handlebars from 'handlebars';
 import createHttpError from 'http-errors';
 import { User } from '../models/user.js';
 import { Session } from '../models/session.js';
 import { createSession, setSessionCookies } from '../services/auth.js';
+import { sendEmail } from '../utils/sendMail.js';
+
 
 export const registerUser = async (req, res, next) => {
   try {
@@ -100,6 +106,91 @@ export const logoutUser = async (req, res, next) => {
     res.clearCookie('refreshToken');
 
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const requestResetEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(200).json({
+        message: 'Password reset email sent successfully',
+      });
+    }
+
+    const token = jwt.sign(
+      { sub: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    const resetLink = `${process.env.FRONTEND_DOMAIN}/reset-password?token=${token}`;
+
+    const templatePath = path.join(
+      process.cwd(),
+      'src',
+      'templates',
+      'reset-password-email.html'
+    );
+    const templateSource = await fs.readFile(templatePath, 'utf-8');
+
+    const template = Handlebars.compile(templateSource);
+    const html = template({
+      username: user.username || user.email,
+      resetLink,
+    });
+
+    await sendEmail({
+      to: user.email,
+      subject: 'Password reset',
+      html,
+    });
+
+    res.status(200).json({
+      message: 'Password reset email sent successfully',
+    });
+  } catch (err) {
+    console.error('Error in requestResetEmail:', err);
+    next(err);
+  }
+};
+
+export const resetPassword = async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+  console.error('Error in requestResetEmail:', err.message || err);
+  next(err);
+}
+
+    const user = await User.findOne({
+      _id: decoded.sub,
+      email: decoded.email,
+    });
+
+    if (!user) {
+      throw createHttpError(404, 'User not found');
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    user.password = hash;
+    await user.save();
+
+    await Session.deleteMany({ userId: user._id });
+
+    res.status(200).json({
+      message: 'Password reset successfully',
+    });
   } catch (err) {
     next(err);
   }
