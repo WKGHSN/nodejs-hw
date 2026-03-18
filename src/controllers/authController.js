@@ -111,6 +111,7 @@ export const logoutUser = async (req, res, next) => {
   }
 };
 
+
 export const requestResetEmail = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -145,17 +146,21 @@ export const requestResetEmail = async (req, res, next) => {
       resetLink,
     });
 
-    await sendEmail({
-      to: user.email,
-      subject: 'Password reset',
-      html,
-    });
+    try {
+      await sendEmail({
+        to: user.email,
+        from: process.env.SMTP_FROM,
+        subject: 'Password reset',
+        html,
+      });
+    } catch {
+      throw createHttpError(500, 'Failed to send the email, please try again later.');
+    }
 
     res.status(200).json({
       message: 'Password reset email sent successfully',
     });
   } catch (err) {
-    console.error('Error in requestResetEmail:', err);
     next(err);
   }
 };
@@ -167,10 +172,9 @@ export const resetPassword = async (req, res, next) => {
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (err) {
-  console.error('Error in requestResetEmail:', err.message || err);
-  next(err);
-}
+    } catch {
+      throw createHttpError(401, 'Invalid or expired token');
+    }
 
     const user = await User.findOne({
       _id: decoded.sub,
